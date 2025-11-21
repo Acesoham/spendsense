@@ -33,6 +33,7 @@ export default function DashboardLayout(){
             <NavLink to="/expenses" className={linkCls}>📒 Expense Logs</NavLink>
             <div className="text-[10px] uppercase tracking-wide opacity-60 mt-4 mb-1">Account</div>
             <NavLink to="/profile" className={linkCls}>👤 Profile</NavLink>
+            <NavLink to="/currency" className={linkCls}>💱 Currency Exchange</NavLink>
             <button className="w-full text-left rounded-md text-base md:text-lg px-4 py-3 hover:bg-gray-100 dark:hover:bg-gray-800" onClick={()=>setOpenChat(true)}>💬 AI Chatbot</button>
             <button className="w-full text-left rounded-md text-base md:text-lg px-4 py-3 hover:bg-red-50 dark:hover:bg-red-900/20" onClick={doLogout}>🚪 Logout</button>
           </nav>

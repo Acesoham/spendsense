@@ -5,7 +5,7 @@ import UPILinkModal from '../ui/UPILinkModal'
 
 export default function Expenses(){
   const [items, setItems] = useState([])
-  const [form, setForm] = useState({ category: 'Food', amount: '', date: new Date().toISOString().slice(0,10), notes: '' })
+  const [form, setForm] = useState({ category: 'Food', amount: '', date: new Date().toISOString().slice(0,10), notes: '', isRecurring: false, recurringRule: 'monthly', recurringStart: '', recurringEnd: '' })
   const [filters, setFilters] = useState({ q: '', category: '', start: '', end: '' })
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -19,6 +19,7 @@ export default function Expenses(){
   const [openLink, setOpenLink] = useState(false)
   const [linked, setLinked] = useState([])
   const [selectedUpi, setSelectedUpi] = useState('')
+  const [recurring, setRecurring] = useState({ items: [], loading: false, error: '' })
 
   const load = async () => {
     setLoading(true)
@@ -34,6 +35,17 @@ export default function Expenses(){
     })()
   }, [])
 
+  const loadRecurring = async () => {
+    setRecurring(s=>({ ...s, loading: true, error: '' }))
+    try {
+      const r = await api.get('/expenses/recurring')
+      setRecurring({ items: r.items || [], loading: false, error: '' })
+    } catch (e) {
+      setRecurring({ items: [], loading: false, error: e?.response?.data?.error || 'Failed to load recurring' })
+    }
+  }
+  useEffect(()=>{ loadRecurring() }, [])
+
   const submit = async (e) => {
     e.preventDefault()
     setError('')
@@ -43,10 +55,22 @@ export default function Expenses(){
       if (!form.category || !form.date || Number.isNaN(amountNum) || amountNum <= 0) {
         throw new Error('Please provide valid category, date, and a positive amount.')
       }
-      const body = { ...form, amount: amountNum, date: new Date(form.date) }
+      const body = { 
+        category: form.category,
+        amount: amountNum,
+        date: new Date(form.date),
+        notes: form.notes,
+      }
+      if (form.isRecurring) {
+        body.isRecurring = true
+        body.recurringRule = form.recurringRule || 'monthly'
+        body.recurringStart = form.recurringStart ? new Date(form.recurringStart) : new Date(form.date)
+        if (form.recurringEnd) body.recurringEnd = new Date(form.recurringEnd)
+      }
       await api.post('/expenses', body)
       setForm({ ...form, amount: '', notes: '' })
       await load()
+      await loadRecurring()
     } catch (err) {
       setError(err?.response?.data?.error || err.message || 'Failed to add expense')
     } finally {
@@ -55,6 +79,7 @@ export default function Expenses(){
   }
 
   const remove = async (id) => { await api.del(`/expenses/${id}`); await load() }
+  const removeTemplate = async (id) => { await api.del(`/expenses/${id}`); await loadRecurring() }
 
   const displayed = useMemo(()=> upiOnly ? items.filter(it=>it.source==='upi') : items, [items, upiOnly])
   const total = useMemo(()=> displayed.reduce((a,b)=>a + b.amount, 0), [displayed])
@@ -64,12 +89,28 @@ export default function Expenses(){
       <div className="card p-4">
         <h3 className="font-semibold mb-3">Add Expense</h3>
         {error && <div className="mb-2 text-sm text-red-500">{error}</div>}
-        <form onSubmit={submit} className="grid md:grid-cols-5 gap-2">
+        <form onSubmit={submit} className="grid md:grid-cols-8 gap-2">
           <input className="p-2 border rounded-md bg-transparent" placeholder="Category" value={form.category} onChange={e=>setForm(f=>({...f, category:e.target.value}))} />
           <input className="p-2 border rounded-md bg-transparent" placeholder="Amount" type="number" value={form.amount} onChange={e=>setForm(f=>({...f, amount:e.target.value}))} />
           <input className="p-2 border rounded-md bg-transparent" type="date" value={form.date} onChange={e=>setForm(f=>({...f, date:e.target.value}))} />
           <input className="p-2 border rounded-md bg-transparent" placeholder="Notes" value={form.notes} onChange={e=>setForm(f=>({...f, notes:e.target.value}))} />
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={form.isRecurring} onChange={e=>setForm(f=>({...f, isRecurring:e.target.checked, recurringStart: e.target.checked ? f.recurringStart || f.date : '', recurringEnd: e.target.checked ? f.recurringEnd : ''}))} /> Recurring
+          </label>
+          {form.isRecurring && (
+            <select className="p-2 border rounded-md bg-transparent" value={form.recurringRule} onChange={e=>setForm(f=>({...f, recurringRule:e.target.value}))}>
+              <option value="monthly">Monthly</option>
+              <option value="weekly">Weekly</option>
+              <option value="yearly">Yearly</option>
+            </select>
+          )}
           <button className="btn btn-primary" disabled={saving}>{saving ? 'Adding…' : 'Add'}</button>
+          {form.isRecurring && (
+            <>
+              <input className="p-2 border rounded-md bg-transparent" type="date" value={form.recurringStart} onChange={e=>setForm(f=>({...f, recurringStart:e.target.value}))} />
+              <input className="p-2 border rounded-md bg-transparent" type="date" value={form.recurringEnd} onChange={e=>setForm(f=>({...f, recurringEnd:e.target.value}))} />
+            </>
+          )}
         </form>
       </div>
 
