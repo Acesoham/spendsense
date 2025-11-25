@@ -11,6 +11,14 @@ import Expense from './models/Expense.js';
 
 dotenv.config();
 
+// Debug: Log environment variables (hiding sensitive data)
+console.log('Environment variables loaded:', {
+  NODE_ENV: process.env.NODE_ENV,
+  GEMINI_API_KEY: process.env.GEMINI_API_KEY ? '*** Key exists ***' : 'No key found',
+  MONGODB_URI: process.env.MONGODB_URI ? '*** MongoDB URI configured ***' : 'No MongoDB URI',
+  JWT_SECRET: process.env.JWT_SECRET ? '*** JWT secret configured ***' : 'No JWT secret'
+});
+
 const app = express();
 app.use(cors());
 app.use(express.json());

@@ -2,9 +2,20 @@ import { Router } from 'express';
 import { authRequired } from '../middleware/auth.js';
 import Expense from '../models/Expense.js';
 import mongoose from 'mongoose';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+
+// Helper function to safely get user ID
+const getUserId = (req) => {
+  try {
+    return req.userId ? new mongoose.Types.ObjectId(req.userId) : null;
+  } catch (e) {
+    return null;
+  }
+};
 
 const router = Router();
-router.use(authRequired);
+// Only protect specific routes that need authentication
+router.use('/insights', authRequired);
 
 // POST /api/ai/insights -> returns suggestions using user's expenses (mock if no key)
 router.post('/insights', async (req, res) => {
@@ -36,12 +47,136 @@ router.post('/insights', async (req, res) => {
   }
 });
 
-// POST /api/ai/chat -> chat with context (mock by default)
+// POST /api/ai/chat -> chat with Gemini AI
 router.post('/chat', async (req, res) => {
   const { message } = req.body || {};
   if (!message) return res.status(400).json({ error: 'message required' });
 
-  // If Grok (xAI) key is provided, use it first (has free-tier options sometimes)
+  // Check if we have a valid API key
+  const geminiApiKey = (process.env.GEMINI_API_KEY || '').trim();
+  console.log('Gemini API Key check:', {
+    hasKey: !!geminiApiKey,
+    keyLength: geminiApiKey.length,
+    keyStartsWith: geminiApiKey ? geminiApiKey.substring(0, 5) + '...' : 'N/A'
+  });
+  
+  if (geminiApiKey && geminiApiKey !== 'your_actual_gemini_api_key_here') {
+    try {
+      console.log('Initializing Gemini client...');
+      const genAI = new GoogleGenerativeAI(geminiApiKey);
+      const model = genAI.getGenerativeModel({ 
+        model: 'gemini-pro',
+        generationConfig: {
+          temperature: 0.7,
+          topP: 1,
+          topK: 40,
+          maxOutputTokens: 1000,
+        },
+      });
+      
+      let expenseContext = '';
+      const userId = getUserId(req);
+
+      if (userId) {
+        try {
+          // Try to get user's recent expenses for context if user is logged in
+          const last30 = new Date(); 
+          last30.setDate(last30.getDate() - 30);
+          
+          const expenses = await Expense.find({
+            user: userId,
+            date: { $gte: last30 }
+          }).sort({ date: -1 }).limit(50);
+
+          if (expenses.length > 0) {
+            expenseContext = `User's recent expenses (${expenses.length} transactions, last 30 days):\n` +
+              expenses.map(e => `- ${e.amount} INR for ${e.description} (${e.category}) on ${e.date.toISOString().split('T')[0]}`).join('\n');
+          } else {
+            expenseContext = 'No recent expense data available. ';
+          }
+        } catch (error) {
+          console.error('Error fetching expenses:', error);
+          expenseContext = 'Unable to fetch expense data. ';
+        }
+      } else {
+        expenseContext = 'User is not logged in. ';
+      }
+
+      let prompt = `You are a helpful financial assistant for SpendSense. `;
+      
+      if (userId) {
+        if (expenseContext.includes('No recent expense data') || expenseContext.includes('Unable to fetch')) {
+          prompt += "The user is logged in but doesn't have any expense data recorded yet. ";
+        } else if (expenseContext) {
+          prompt += `Here's the user's spending context:\n${expenseContext}\n\n`;
+        }
+      } else {
+        prompt += 'The user is not logged in, so I cannot access their expense data. ';
+      }
+      
+      prompt += `User's question: ${message}
+      
+      Please provide a helpful, concise response in a friendly tone. `;
+      
+      if (userId) {
+        prompt += 'If the question is about spending patterns or financial advice and you have expense data, use it. ';
+      }
+      
+      prompt += 'Otherwise, provide general financial advice. ';
+      prompt += 'If the user asks about features that require login (like viewing their expenses), gently suggest they create an account or log in.';
+
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      const text = response.text();
+      
+      return res.json({
+        provider: 'gemini-pro',
+        reply: text
+      });
+    } catch (error) {
+      console.error('Gemini API error details:', {
+        status: error.status,
+        statusText: error.statusText,
+        message: error.message,
+        code: error.code,
+        config: {
+          url: error.config?.url,
+          method: error.config?.method,
+          headers: error.config?.headers ? Object.keys(error.config.headers) : 'No headers'
+        },
+        stack: error.stack
+      });
+      // Fall through to mock response
+    }
+  }
+
+  // Fallback to mock response if no valid Gemini key or if there's an error
+  console.log('Using mock response - no valid Gemini API key found');
+  
+  // Simple mock response based on common questions
+  const mockResponses = {
+    'how can i save money': "Start by tracking all your expenses to see where your money is going. Then, create a budget and look for areas where you can cut back, like dining out or subscriptions you don't use.",
+    'what is spendsense': "SpendSense is a personal finance app that helps you track your expenses, set budgets, and get insights into your spending habits to help you save more money.",
+    'how to track expenses': "You can track expenses by adding them manually in the app. Try to log every expense, no matter how small, to get a complete picture of your spending."
+  };
+  
+  // Find a matching mock response or use a default one
+  const lowerMessage = message.toLowerCase();
+  let reply = "I'm here to help with financial advice. You can ask me about saving money, budgeting, or how to use SpendSense.";
+  
+  for (const [key, response] of Object.entries(mockResponses)) {
+    if (lowerMessage.includes(key)) {
+      reply = response;
+      break;
+    }
+  }
+  
+  return res.json({
+    provider: 'mock',
+    reply: reply
+  });
+  
+  // Keep the old fallback code in case we need it
   if (process.env.XAI_API_KEY) {
     try {
       const last30 = new Date(); last30.setDate(last30.getDate() - 30);
