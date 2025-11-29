@@ -43,7 +43,7 @@ const PORT = process.env.PORT || 5000;
 (async () => {
   await connectDB(process.env.MONGODB_URI || 'mongodb://localhost:27017/expensiooo');
   (`${process.env.REACT_APP_API_URL}/api/users/login`, data);
-  app.listen(PORT, () => console.log(`🚀 Server running on http://localhost:${PORT}`));
+  app.listen(PORT, () => console.log(`🚀 Server running on https://spendsense-mxqw.onrender.com:${PORT}`));
 
   // Simple daily scheduler for recurring expenses
   const startOfMonthUTC = (d) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));

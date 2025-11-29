@@ -1,8 +1,8 @@
 import axios from 'axios'
 
-const instance = axios.create({ baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api' })
+const instance = axios.create({ baseURL: 'https://spendsense-mxqw.onrender.com/api' })
 
-export const api = {
+export const api = {  
   setToken(token) {
     instance.defaults.headers.common['Authorization'] = token ? `Bearer ${token}` : ''
   },
