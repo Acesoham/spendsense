@@ -20,9 +20,14 @@ console.log('Environment variables loaded:', {
 });
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: ["https://spendsense.vercel.app"],  // your Vercel domain
+  credentials: true}
+));
 app.use(express.json());
 app.use(morgan('dev'));
+
+
 
 app.get('/api/health', (req, res) => {
   res.json({ ok: true, time: new Date().toISOString() });
@@ -37,6 +42,7 @@ const PORT = process.env.PORT || 5000;
 
 (async () => {
   await connectDB(process.env.MONGODB_URI || 'mongodb://localhost:27017/expensiooo');
+  (`${process.env.REACT_APP_API_URL}/api/users/login`, data);
   app.listen(PORT, () => console.log(`🚀 Server running on http://localhost:${PORT}`));
 
   // Simple daily scheduler for recurring expenses
